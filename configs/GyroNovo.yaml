@@ -1,0 +1,217 @@
+random_seed: 454
+
+n_peaks: 150
+min_mz: 50.52564895
+max_mz: 2500.0
+min_intensity: 0.01
+remove_precursor_tol: 2.0
+max_charge: 10
+precursor_mass_tol: 50
+isotope_error_range: [0, 1]
+
+n_workers: 4
+warmup_iters: 100000
+max_iters: 300000
+# Null preserves Lightning's default (no gradient clipping).
+gradient_clip_val:
+num_sanity_val_steps: 0
+val_check_interval:
+check_val_every_n_epoch: 1
+
+learning_rate: 5.0e-4
+weight_decay: 1.0e-5
+max_epochs: 30
+train_batch_size: 32
+
+save_weights_only: true
+model_save_folder_path: "./outputs/GyroNovo/checkpoints"
+logger_save_path: "./outputs/GyroNovo/train.log"
+use_wandb: true
+wandb_project: "novobench"
+wandb_entity:
+wandb_name: "GyroNovo"
+wandb_save_dir: "./wandb"
+wandb_mode: "online"
+wandb_log_model: false
+
+predict_batch_size: 256
+devices: 1
+save_top_k: 1
+monitor_metric: "valid_pep_recall"
+monitor_mode: "max"
+early_stopping_enabled: true
+early_stopping_monitor: "valid_pep_recall"
+early_stopping_mode: "max"
+early_stopping_patience: 5
+early_stopping_min_delta: 0.0
+
+lipnovo:
+  dim_model: 512
+  n_head: 8
+  dim_feedforward: 1024
+  accelerator: "auto"
+  n_layers: 9
+  dropout: 0
+  dim_intensity:
+  max_length: 100
+  min_peptide_len: 6
+  train_label_smoothing: 0.01
+  validation_decode_fraction: 0.1
+  residues:
+    "G": 57.021464
+    "A": 71.037114
+    "S": 87.032028
+    "P": 97.052764
+    "V": 99.068414
+    "T": 101.047670
+    "C(+57.02)": 160.030649
+    "L": 113.084064
+    "I": 113.084064
+    "N": 114.042927
+    "D": 115.026943
+    "Q": 128.058578
+    "K": 128.094963
+    "E": 129.042593
+    "M": 131.040485
+    "H": 137.058912
+    "F": 147.068414
+    "R": 156.101111
+    "Y": 163.063329
+    "W": 186.079313
+    "M(+15.99)": 147.035400
+    "N(+.98)": 115.026943
+    "Q(+.98)": 129.042594
+  n_beams: 5
+  top_match: 1
+  training_code: "extended"
+  gen_num: 100
+  gen_enc_layers: 0
+  gen_dec_layers: 3
+  gen_threshold: 0.8
+  augmentation:
+    enabled: true
+    views:
+      types: ["easy", "hard"]
+      decode: true
+      easy:
+        difficulty_scale: 0.5
+        loss_weight: 1.0
+      hard:
+        difficulty_scale: 1.0
+        loss_weight: 1.0
+    min_mz: 50.0
+    max_rendered_peaks: 150
+
+    # Relative intensities used only when GyroNovo must synthesize a fragment.
+    theoretical_spectrum:
+      position_baseline: 0.75
+      position_center_boost: 0.35
+      b_ion_intensity_scale: 1.0
+      y_ion_intensity_scale: 1.0
+      ptm_intensity_boost: 1.0
+
+    # Used only if an observed spectrum is unavailable or malformed.
+    fallback_theoretical:
+      ptm_dropout_scale: 0.5
+      maximum_drop_probability: 1.0
+
+    # Start from measured peaks, then selectively retain or fill fragments.
+    observed_anchor:
+      enabled: true
+      mz_tolerance: 0.5
+      fragment_keep_probability: 0.90
+      unannotated_keep_probability: 0.70
+      missing_fragment_add_probability: 0.30
+
+      # Focus is normalized to [0, 1] from the decoder's residue-level error.
+      # At full focus the easy view keeps all matched fragments (0.90 + 0.10).
+      easy_focus:
+        keep_probability_boost: 0.40
+        add_probability_boost: 0.30
+        intensity_boost: 0.20
+
+      # The hard view removes evidence around residues the decoder finds hard.
+      # extra_drop_probability is disabled: keep_probability_penalty already
+      # controls focused peak removal and avoids two redundant drop stages.
+      hard_focus:
+        keep_probability_penalty: 0.40
+        add_probability_penalty: 0.30
+        extra_drop_probability: 0.0
+        intensity_penalty: 0.20
+
+      # These values are coefficients, not direct probabilities.
+      keep_penalties:
+        peak_missingness: 0.20
+        ion_dropout: 0.20
+        ptm_visibility: 0.10
+      add_penalties:
+        peak_missingness: 0.15
+        ptm_visibility: 0.15
+
+      probability_bounds:
+        keep_min: 0
+        keep_max: 1.0
+        add_min: 0
+        hard_add_min: 0.0
+        add_max: 0.90
+
+      # Easy views preserve ladder-gap fragments only above this focus score.
+      easy_ladder_focus_threshold: 0.5
+
+    ladder_gap:
+      # Maximum run is 1 + round(max_run_scale * ladder-gap difficulty).
+      max_run_scale: 3.0
+
+    structured_noise:
+      neutral_loss_masses: [18.010565, 17.026549]
+      mz_jitter_std: 0.01
+      intensity_fraction_range: [0.08, 0.35]
+      reference_intensity_cap: 0.35
+      # Real anchored spectra already contain noise, so add only 35% as much.
+      observed_anchor_count_scale: 0.35
+  curriculum:
+    mode: "linear"
+    # PTM spectra receive 15% more PTM-visibility corruption.
+    ptm_visibility_multiplier: 1.2
+    decoder_guidance:
+      enabled: true
+      mode: "vanilla_aa_ce"
+      strength: 1.0
+      sample_scale_min: 1.0
+      sample_scale_max: 1.5
+      loss_temperature: 1.0
+      peak_focus_strength: 1.0
+      peak_focus_radius: 1
+      target_weight_min: 1.0
+      target_weight_max: 2.0
+      hard_threshold: 0.65
+    initial_difficulty:
+      peak_missingness: 0.0
+      b_ion_dropout: 0.0
+      y_ion_dropout: 0.0
+      fragmentation_ladder_gap: 0.0
+      intensity_jitter: 0.0
+      mz_jitter: 0.0
+      structured_noise_count: 0.0
+      ptm_visibility_reduction: 0.0
+    max_difficulty:
+      peak_missingness: 0.5
+      b_ion_dropout: 0.5
+      y_ion_dropout: 0.5
+      fragmentation_ladder_gap: 0.80
+      intensity_jitter: 0.5
+      mz_jitter: 0.2
+      structured_noise_count: 24.0
+      ptm_visibility_reduction: 0.8
+  auxiliary_losses:
+    lambda_theory: 1.0
+    lambda_imp_real: 1.0
+    lambda_imp_aug: 1.0
+    lambda_decode_aug: 1.0
+  mz_rope:
+    enabled: true
+    min_wavelength: 1.0
+    max_wavelength: 10000.0
+  analysis:
+    best_validation_predictions_output: "./outputs/GyroNovo/best_validation_predictions.csv"
+    high_confidence_threshold: 0.98
